@@ -11,6 +11,7 @@ spaces that we could shape with the time ( cars parking in )
         ---------
 
 '''
+
 from audioop import cross
 from cmath import cos
 import copy
@@ -20,65 +21,105 @@ import cv2
 from cv2 import CALIB_USE_QR
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 import math
 import keyboard
 import ast
 import random
+from scipy import stats
 
-#func to get intersection btwn to lines line1((x0 y0) x1 y1) line2((x0 y0) (x1 y1))
-def line_intersection(line1, line2):
-    #acces to space matrix (which is the matrix that tells us if a pixel in the picture is worth to compute or no )
-    global space
+class Parking():
+    def __init__(self,lines) -> None:
+        self.lines=[]
+        self.graphStrcut={}
+        self.intersection={}
+        for idc,l in enumerate(lines) :
+            leninter=len([intersect(l,l2) for l2 in lines if intersect(l,l2)!=None])
+            self.lines.append(Line(coords=l,ID=idc,inter=leninter))
+        self.lines.sort(key=lambda k: k.lensections,reverse=True)
+        dumplines = self.lines.copy()
+        for we,l in enumerate(self.lines):
+            if l not in dumplines:continue
+            print(l)
 
-    #intersection detect : source  (https://stackoverflow.com/questions/20677795/how-do-i-compute-the-intersection-point-of-two-lines)
-    xdiff = (line1[0][0] - line1[1][0], line2[0][0] - line2[1][0])
-    ydiff = (line1[0][1] - line1[1][1], line2[0][1] - line2[1][1])
+            interpt=[intersect(l.coord,l2.coord) for l2 in self.lines ]
+            interid=[i for i in range(len(interpt)) if interpt[i]!=None ]
+            if len(interid)==0:continue
+            
+            for d in interid :  
+                try:
 
-    def det(a, b):
-        return a[0] * b[1] - a[1] * b[0]
+                    dumplines.remove(self.lines[d]) 
+                    dumplines.remove(self.lines[we]) 
+                except:pass
+            self.graphStrcut[we]=interid
+            self.intersection[we]={}
+            for d in interid:self.intersection[we][d]=interpt[d]
+        
+            
+            
 
-    div = det(xdiff, ydiff)
-    #avoid infinite division
-    if div == 0:
-       return False
 
-    d = (det(*line1), det(*line2))
-    # end intersection detect
-    #intersect coords:
-    x = det(d, xdiff) / div
-    y = det(d, ydiff) / div
-    #check if intersection point is in our picture size range
-    if 0<y<len(space) and 0<x<len(space[0]):
-     #prints the intersection point and its state in the space matrix
-     #print(f'({int(x),int(y)}) : {space[int(y),int(x)]}')
-     #if our matrix space at a postion x,y is 0 (space(x,y)=0 : this point is not  woth to compute because  its not an active point)
-     if space[int(y),int(x)]!=0:
-        #if active point return intersection point
-        return x, y
-        #if active point return intersection point
-     else:return False
-     
-#IF POINT not in pciture => False
-    else : return False
+        
+class Line():
+    def __init__(self,coords,ID,inter) -> None:
+        self.coord=coords
+        self.LineID=ID
+        self.intersections=[]
+        self.lensections=inter
+        self.linelen=round(math.sqrt((coords[0][0]-coords[1][0])**2+(coords[1][0]-coords[1][1])**2),3)
+
+    def __repr__(self) -> str:
+        return f'Line {self.LineID} cross :{self.lensections} long : {self.linelen} px '
+    def printIntersections(self):
+        print(f'>====Line{self.LineID} , {self.lensections} Intersections :')
+
+        if self.lensections==0:
+                print('>=No intersection')
+        else:
+            for dg,i in enumerate(self.intersections):
+                if i==None:continue
+                print(f'=line {dg} : {i}')
+                
+
+
+
+def intersect(l1,l2):
+    x1,y1 = l1[0]
+    x2,y2 = l1[1]
+    x3,y3 = l2[0]
+    x4,y4 = l2[1]
+    denom = (y4-y3)*(x2-x1) - (x4-x3)*(y2-y1)
+    if denom == 0: # parallel
+        return None
+    ua = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / denom
+    if ua < 0 or ua > 1: # out of range
+        return None
+    ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom
+    if ub < 0 or ub > 1: # out of range
+        return None
+    x = x1 + ua * (x2-x1)
+    y = y1 + ua * (y2-y1)
+    return (x,y)
+
+	
 
 ######################################### MAIN #############################################
 
 
 def detectLines(file):
     #store the y=mx+b lines
-
+    global space
     bigLines=[]
-
     #we read the frame/picture
     img = cv2.imread(file)
+    img=cv2.resize(img,[640,480])
     #filter
     gr=cv2.cvtColor(src=img, code=cv2.COLOR_BGR2GRAY)
     #filter to lower details
     blur_gray = cv2.GaussianBlur(src=gr, ksize=(5, 5), sigmaX=0)
     #threshold used for canny edges detection
-    thresholds=[30, 200,]
-    #read picture/frame
-    img = cv2.imread(file)   
+    thresholds=[20, 200,]
     #state str
     state=f'{file},threshold: {thresholds[0]}-{thresholds[1]}'
     #clear plt for next picture
@@ -94,6 +135,7 @@ def detectLines(file):
     #lines = lsd.detect(edges)[0] #Position 0 of the returned tuple are the detected lines
 
     #Detect lines in the image with HoughLinesP !! the parameters are not optimal !!
+    #cv.HoughLinesP(	image, rho, theta, threshold[, lines[, minLineLength[, maxLineGap]]]	) ->	lines
     lines = cv2.HoughLinesP(edges, 1, np.pi / 180, 50, None, 50, 50)  # !  Lines= Detected lines
     #get the size of the image
     i,j= img.shape[:2]
@@ -101,17 +143,19 @@ def detectLines(file):
     #so we can iterate in the picture to spot the active pixels 
     lescord=[(x,y) for x in range(i) for y in range(j) if edges[x,y]==255]
     # we create a matrix with the size of the picture (i x j) init to 0
-    space=np.full((i,j),0)
+    space=np.full((i+10,j+10),0)
     #we mark our active pixels as 1 in the space matrix
     for x,y in lescord:
         space[x,y]=1
     #we put our picture in matplotlib board
-    plt.imshow(edges)
+
+    plt.imshow(img)
     #list where we save the line equations 
     bigLines=[]
     #(new idea) list of intersection points
     comp=[]
     #we iterate detected lines
+    splittedLines=[]
     for ff,line1 in enumerate(lines):
         #line1 => [[line]] so we convert to line1 => [[x0,y0],[x1,y1]]
         line1=[line1[0][:2],line1[0][2:]]
@@ -121,10 +165,7 @@ def detectLines(file):
             det = (line1[1][1]-line1[0][1])/(line1[1][0]-line1[0][0])
         else:det=0
         #update title with plotting line number
-        #plt.title(f'[{po+1}/{len(files)}]{state} Line {ff+1}/{len(lines)}')
         plt.title(f'Low Detail image')
-        #Plot detected line Instruction :
-        #plt.plot([line1[0][0],line1[1][0]],[line1[0][1],line1[1][1]],color='r',linewidth=1)
         #create list of number from 0 to picture width (x)
         x = np.linspace(0,j,j)
         #compute y images ( height)
@@ -137,15 +178,15 @@ def detectLines(file):
         ny=[]
         dy=[]
         #we check our line by iterating the  points
+############################### DETECTED LINES FILTERING ###############################
         for s in range(len(x)):
             #skip if point is not on picture size range (0-i for y) (0-j for x but already satisfafied)
             if  (int(y[s])>=i or int(y[s])<0) or (int(x[s])>=j or x[s]<0) :continue
             #Skip if point is not active according to space matrix
+            #We check points arount the current not active points (if line not shaped corectly)
             if space[int(y[s]),int(x[s])]==0:
-                
-
-                for u in range(5):
-                    for v in range(5):
+                for u in range(-2,2):
+                    for v in range(-2,2):
                         try:t= space[int(y[s])+v,int(x[s])+u]
                         except: t=0
                         if t>0:
@@ -165,10 +206,13 @@ def detectLines(file):
                 nx.append(x[s])
                 ny.append(y[s])
                 dx.append(x[s])
-                dy.append(y[s])
-
+                dy.append(y[s])           
         #list containing our x and y and  the slope our y0 and representation of 4 points of the line
-        equa=[nx,ny,det,y0,[[dx[0],dy[0]],[dx[-1],dy[-1]]]]
+        if len(dx)<2 : continue
+        try:
+         equa=[nx,ny,det,y0,[[dx[0],dy[0]],[dx[-1],dy[-1]]]]
+        # equa=[dx,dy,det,y0,[[dx[0],dy[0]],[dx[-1],dy[-1]]]]
+        except:pass
         #if fist iteration add line
         if len(bigLines)==0:
             bigLines.append(equa)
@@ -176,50 +220,115 @@ def detectLines(file):
         #we suppose a new line
         newLine=True
         #we iterate trought saved lines
-        #A
-        ll2=equa[-1]
-        l1=(ll2[1][0]-ll2[0][0],ll2[1][1]-ll2[0][1])
-        for bv,ll in enumerate(bigLines):
+        #current line
+        currentLine=equa[-1]
+        l1=(currentLine[1][0]-currentLine[0][0],currentLine[1][1]-currentLine[0][1])
+        #compared lines
+        for bv,compareLine in enumerate(bigLines):
             #loop line
-            ll=ll[-1]
-            l2=(ll[1][0]-ll[0][0],ll[1][1]-ll[0][1])
+            compareLine=compareLine[-1]
+            l2=(compareLine[1][0]-compareLine[0][0],compareLine[1][1]-compareLine[0][1])
             costeta=(np.dot(l1,l2))/(math.sqrt(l2[0]**2+l2[1]**2)*(math.sqrt(l1[0]**2+l1[1]**2)))
-            c=np.cross(l1,l2)
-            stateee=''
-            if np.arccos(costeta)*180/math.pi<15:
-                stateee='Parallal'
-            if 70<np.arccos(costeta)*180/math.pi<97:
-                stateee='Perpendicular'
-
-            diffs=[abs(ll2[i][j]-ll[i][j]) for i in range(2) for j in range(2)]
-        
-            print(f'>>>>>Line {ff}--{bv}    \n      COS={costeta:.2}\n      angle: {(np.arccos(costeta)*180/math.pi)}\n     crossP: {c:.4} ')
+            diffs=[abs(currentLine[i][j]-compareLine[i][j]) for i in range(2) for j in range(2)]
             diffxy=30
-            print(f'        points  <10   :{all(x<diffxy for x in diffs)}')
-            print(f'*******End Line {ff}--{bv}   ******** ')
+            if costeta<0.3:
+                stateee='Perpendicular'
             if all(x<diffxy for x in diffs) and (costeta>0.78):
                 newLine=False
-                print(f'>Same line : Line {ff}--{bv}')
-
                 break
         if newLine:
             bigLines.append(equa)    
-           
-    print(f'>  Result :  {len(bigLines)} Lines')
-    for kj,las in enumerate(bigLines):
-       
-        print(f'> Line {kj}/{len(bigLines)-1}  : {len(las[0])}')
-        plt.scatter(las[0],las[1],linewidths=0.5)
-        plt.pause(0.1)
-    plt.title('space')
-    plt.show()
+################################################################################################################           
+######## Line Splitting ########
+    for llf in bigLines:
+     filteredLines=[]
+     cleanX=list(set(llf[0]))
+     def myfunc(x):
+            return llf[2] * x + llf[3]
+     cleanY=list(map(myfunc, cleanX))
+     LinebyPoints=[(cleanX[xx],cleanY[xx]) for xx in range(len(cleanX)) if 0<cleanX[xx] and 0<cleanY[xx]]
+     LinebyPoints.sort(key=lambda k: [k[1], k[0]])
+     ita=0
+     for i in range(len(LinebyPoints)-1):
+        VectDist=math.dist(LinebyPoints[i],LinebyPoints[i+1])
+        if VectDist>10:
+            try:
+                filteredLines.append([LinebyPoints[ita],LinebyPoints[i]])
+                ita=i+1
+            except:pass#a voir
+     try:
+      filteredLines.append([LinebyPoints[ita],LinebyPoints[i]])
+      splittedLines=splittedLines+filteredLines
+     except:pass
+
+    return splittedLines
+
+################################
+
+'''
+######################################
+    
+
+        plt.scatter([x[0] for x in inter],[x[1] for x in inter],color='r')
+    for line in LineObject:
+        line.printIntersections()
+    
+#####################################
+
+    
+'''
+
+
+
+
+
+         
+     #plt.plot([llf[-1][0][0],llf[-1][1][0]],[llf[-1][0][1],llf[-1][1][1]],color='g')
+     #plt.plot([llf[0][0],llf[0][-1]],[llf[1][0],llf[1][-1]],color='g',linewidth=5)
+    
+
+    
+
+# Images
+
+# Inference
+
+# Results
+
 
 
 #all files to test ( must be pictores of parking space with min number of cars empty if possible for now)
-files = ['parking.jpg','parking2.jpg','input.jpg','outin.webp','int.webp','inputTest.png','input1.webp']
+files = ['input.jpg','inputTest.png','input1.webp','int.webp','outin.webp','parking2.jpg',]
 #files to test
-random.shuffle(files)
+#random.shuffle(files)
 #if you want random demo order
-
+iy=1
 for po,file in enumerate(files):
-    detectLines(file)
+    img = cv2.imread(file)
+    img=cv2.resize(img,[640,480])
+    li=detectLines(file)
+    
+ 
+    parkingPlace=Parking(li)
+    ld=sorted(parkingPlace.lines,key=lambda k: k.linelen,reverse=True)
+    for lg in ld :
+        print(lg)
+        
+     
+
+    for l in parkingPlace.graphStrcut:
+        #if l>3:continue
+        plt.plot([parkingPlace.lines[l].coord[0][0],parkingPlace.lines[l].coord[-1][0]],[parkingPlace.lines[l].coord[0][1],parkingPlace.lines[l].coord[-1][1]],color='r',linewidth=3)
+
+        for ll in parkingPlace.graphStrcut[l]:
+            
+            plt.plot([parkingPlace.lines[ll].coord[0][0],parkingPlace.lines[ll].coord[-1][0]],[parkingPlace.lines[ll].coord[0][1],parkingPlace.lines[ll].coord[-1][1]],color='g')
+            if l in parkingPlace.intersection and ll in parkingPlace.intersection[l]:
+                coordsInt=parkingPlace.intersection[l][ll]
+                plt.scatter(coordsInt[0],coordsInt[1],color='b')
+        #plt.pause(2)
+
+    #plt.imshow(edges)
+
+    plt.show()
+    #input()
