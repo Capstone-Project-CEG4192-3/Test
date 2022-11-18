@@ -33,7 +33,12 @@ class Parking():
         self.lines=[]
         self.graphStrcut={}
         self.intersection={}
+        self.nodes={}
+        self.points=[]
+        lines.sort(key=lambda k: [k[0],k[1]])
         for idc,l in enumerate(lines) :
+            self.points+=l
+            print(len(self.points))
             leninter=len([intersect(l,l2) for l2 in lines if intersect(l,l2)!=None])
             self.lines.append(Line(coords=l,ID=idc,inter=leninter))
         self.lines.sort(key=lambda k: k.lensections,reverse=True)
@@ -55,6 +60,26 @@ class Parking():
             self.graphStrcut[we]=interid
             self.intersection[we]={}
             for d in interid:self.intersection[we][d]=interpt[d]
+        for yu in self.intersection:
+            self.nodes[yu]={}
+            for ee,ii in enumerate(self.intersection[yu]):
+                print('-----------',self.lines[ii].coord)
+                print(self.intersection[yu][ii])
+                a=self.intersection[yu][ii]
+                b=self.lines[ii].coord
+                l1x= self.lines[ii].coord[:2]
+                l11=[[b[0][0],b[0][1]],[a[0],a[1]]]
+                l1=Line(l11,-1,1)
+                l2x= self.lines[ii].coord[2:]
+                
+                l22=[[a[0],a[1]],[b[1][0],b[1][1]]]
+
+                print(l22)
+
+                l2=Line(l22,-1,1)
+                self.nodes[yu][ii]=[]
+                self.nodes[yu][ii].append(l1)
+                self.nodes[yu][ii].append(l2)
         
             
             
@@ -298,7 +323,7 @@ def detectLines(file):
 
 
 #all files to test ( must be pictores of parking space with min number of cars empty if possible for now)
-files = ['input.jpg','inputTest.png','input1.webp','int.webp','outin.webp','parking2.jpg',]
+files = ['inputTest.png','input.jpg','input1.webp','int.webp','outin.webp','parking2.jpg',]
 #files to test
 #random.shuffle(files)
 #if you want random demo order
@@ -307,25 +332,88 @@ for po,file in enumerate(files):
     img = cv2.imread(file)
     img=cv2.resize(img,[640,480])
     li=detectLines(file)
-    
- 
     parkingPlace=Parking(li)
+
+
     ld=sorted(parkingPlace.lines,key=lambda k: k.linelen,reverse=True)
     for lg in ld :
         print(lg)
+    
         
      
 
     for l in parkingPlace.graphStrcut:
         #if l>3:continue
         plt.plot([parkingPlace.lines[l].coord[0][0],parkingPlace.lines[l].coord[-1][0]],[parkingPlace.lines[l].coord[0][1],parkingPlace.lines[l].coord[-1][1]],color='r',linewidth=3)
-
+        coordsIntNext=None
+        
         for ll in parkingPlace.graphStrcut[l]:
-            
-            plt.plot([parkingPlace.lines[ll].coord[0][0],parkingPlace.lines[ll].coord[-1][0]],[parkingPlace.lines[ll].coord[0][1],parkingPlace.lines[ll].coord[-1][1]],color='g')
+            #plt.plot([parkingPlace.lines[ll].coord[0][0],parkingPlace.lines[ll].coord[-1][0]],[parkingPlace.lines[ll].coord[0][1],parkingPlace.lines[ll].coord[-1][1]],color='g')
             if l in parkingPlace.intersection and ll in parkingPlace.intersection[l]:
-                coordsInt=parkingPlace.intersection[l][ll]
+                if coordsIntNext==None:
+                 coordsIntNext=parkingPlace.intersection[l][ll]
+                 curl,curll=l,ll
+                 continue
+                coordsInt=coordsIntNext
+                
+                coordsIntNext=parkingPlace.intersection[l][ll]
+                
+
+                
+                print(f'mainline {l} with inter {ll}')
                 plt.scatter(coordsInt[0],coordsInt[1],color='b')
+                savedG=[]
+                while True:
+                    plt.imshow(img)
+                    box=[coordsInt,coordsIntNext,parkingPlace.nodes[l][ll][0].coord[0],parkingPlace.nodes[curl][curll][0].coord[0]]
+                    box2=[coordsInt,coordsIntNext,parkingPlace.nodes[l][ll][1].coord[1],parkingPlace.nodes[curl][curll][1].coord[1]]
+                    #box3=[parkingPlace.points[random.randint(0,len(parkingPlace.points)-1)] for i in range(4)]
+                    '''
+                    randomnode=random.choice(list(parkingPlace.nodes.keys()))
+                    randomline=random.choice(list(parkingPlace.nodes[randomnode].keys()))
+                    point1 =parkingPlace.nodes[randomnode][randomline][random.randint(0,1)].coord[random.randint(0,1)]
+                    randomline=random.choice(list(parkingPlace.nodes[randomnode].keys()))
+                    point2 =parkingPlace.nodes[randomnode][randomline][random.randint(0,1)].coord[random.randint(0,1)]
+                    point3 =parkingPlace.nodes[randomnode][randomline][random.randint(0,1)].coord[random.randint(0,1)]
+                    randomline=random.choice(list(parkingPlace.nodes[randomnode].keys()))
+                    point4 =parkingPlace.nodes[randomnode][randomline][random.randint(0,1)].coord[random.randint(0,1)]
+                    data=f'{box3s},'
+                    if box3s  in savedG:
+                        continue
+                    savedG.append(box3s)
+                    '''
+                   # box3=[point1,point2,point3,point4]
+                    #box3s=[int(box3[i][j]) for i in range (2) for j in range(2)]
+                    #print(box3s)
+                    print(f'{len(savedG)} ',end='\r')
+                    curl,curll=l,ll
+                    from matplotlib.patches import Polygon
+                    r = random.random()
+                    b = random.random()
+                    g = random.random()
+                    color = (r, g, b)
+                    polygon1 = Polygon(box,color=color)
+                    r = random.random()
+                    b = random.random()
+                    g = random.random()
+                    color = (r, g, b)
+                    polygon2 = Polygon(box2,color=color)
+                    polygon3 = Polygon(box2,color=color)
+                    plt.gca().add_patch(polygon1)
+                    plt.pause(0.01)
+                    plt.gca().add_patch(polygon2)
+                    break
+                    
+                    #plt.gca().add_patch(polygon3)
+                    #plt.pause(0.5)
+
+            
+                
+        for n in parkingPlace.nodes[l]:
+            for ll in  parkingPlace.nodes[l][n]:pass
+             #plt.plot([ll.coord[0][0],ll.coord[-1][0]],[ll.coord[0][1],ll.coord[-1][1]],linewidth=3)
+             #plt.pause(0.5)
+                     
         #plt.pause(2)
 
     #plt.imshow(edges)
